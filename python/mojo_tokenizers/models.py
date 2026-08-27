@@ -348,14 +348,50 @@ class WordPiece(Model):
         self._index = _VocabIndex(self.vocab)
         self._prefix = u32(self.continuing_subword_prefix)
         self._prefix_len = len(self.continuing_subword_prefix)
+        self._cache: dict[
+            str, tuple[list[int], list[str], list[int], list[int]]
+        ] = {}
 
     def _encode(
         self, text: str, segments: list[tuple[int, int]]
     ) -> tuple[list[int], list[str], list[int], list[int]]:
+        self._last_segment_counts = None
         if self._unk_id < 0:
             raise ValueError(f"WordPiece unknown token {self.unk_token!r} is not in vocab")
         if not segments:
             return [], [], [], []
+        if len(segments) == 1:
+            return self._encode_uncached(text, segments)
+
+        pieces = [text[start:end] for start, end in segments]
+        missing = list(dict.fromkeys(piece for piece in pieces if piece not in self._cache))
+        if len(missing) > 128:
+            return self._encode_uncached(text, segments)
+        for piece in missing:
+            if len(self._cache) >= 10_000:
+                self._cache.pop(next(iter(self._cache)))
+            self._cache[piece] = self._encode_uncached(piece, [(0, len(piece))])
+
+        cached = [self._cache[piece] for piece in pieces]
+        self._last_segment_counts = [len(encoded[0]) for encoded in cached]
+        ids = [token_id for encoded in cached for token_id in encoded[0]]
+        tokens = [token for encoded in cached for token in encoded[1]]
+        starts = [
+            segment_start + start
+            for (segment_start, _), encoded in zip(segments, cached)
+            for start in encoded[2]
+        ]
+        ends = [
+            segment_start + end
+            for (segment_start, _), encoded in zip(segments, cached)
+            for end in encoded[3]
+        ]
+        return ids, tokens, starts, ends
+
+    def _encode_uncached(
+        self, text: str, segments: list[tuple[int, int]]
+    ) -> tuple[list[int], list[str], list[int], list[int]]:
+        self._last_segment_counts = None
         chars = u32(text)
         starts_in = i64([start for start, _ in segments])
         ends_in = i64([end for _, end in segments])

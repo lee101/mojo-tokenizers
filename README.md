@@ -84,18 +84,19 @@ port is slower.
 
 | case | mojo-tokenizers | tokenizers 0.23.1 | ratio |
 | --- | ---: | ---: | ---: |
-| BPE encode (0.32M chars) | 70.57 ms | 86.95 ms | 1.23x |
-| WordPiece encode (0.32M chars) | 198.38 ms | 102.06 ms | 0.51x |
-| Unigram encode (0.32M chars) | 159.73 ms | 211.62 ms | 1.32x |
-| BPE train (4k lines, vocab 160) | 9.82 ms | 11.23 ms | 1.14x |
-| WordPiece train (4k lines, vocab 160) | 12.91 ms | 11.07 ms | 0.86x |
-| Unigram train (4k lines, vocab 160) | 8.53 ms | 12.43 ms | 1.46x |
+| BPE encode (0.32M chars) | 66.63 ms | 70.03 ms | 1.05x |
+| WordPiece encode (0.32M chars) | 67.71 ms | 77.30 ms | 1.14x |
+| Unigram encode (0.32M chars) | 148.93 ms | 167.57 ms | 1.13x |
+| BPE train (4k lines, vocab 160) | 11.84 ms | 13.01 ms | 1.10x |
+| WordPiece train (4k lines, vocab 160) | 9.92 ms | 12.26 ms | 1.24x |
+| Unigram train (4k lines, vocab 160) | 10.50 ms | 14.40 ms | 1.37x |
 
-BPE and Unigram cache bounded per-segment encodings, corpus preparation aggregates
-repeated input lines before pre-tokenization, and small trainer states stay serial to
-avoid FFI and thread-launch overhead. Large pair-table clears use a parallel threshold;
-BPE scratch copies and Unigram dynamic-programming initialization use SIMD with scalar
-tails.
+BPE, WordPiece, and Unigram cache bounded per-segment encodings, corpus preparation
+aggregates repeated input lines before pre-tokenization, and small trainer states stay
+serial to avoid FFI and thread-launch overhead. Large pair-table clears use a parallel
+threshold; BPE scratch copies, pair-table initialization, and Unigram dynamic-programming
+initialization use SIMD with scalar tails. UTF-32 input views cross the FFI boundary
+without an additional NumPy copy.
 
 There is no GPU path. These kernels are dominated by branch-heavy hash probes, short
 string comparisons, and low-intensity buffer initialization, all below the arithmetic

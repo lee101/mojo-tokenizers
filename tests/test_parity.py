@@ -184,6 +184,13 @@ def test_wordpiece_longest_match_parity(wordpiece_pair, text):
     assert_encoding_equal(ours.encode(text), theirs.encode(text))
 
 
+def test_wordpiece_repeated_segment_cache_parity(wordpiece_pair):
+    ours, theirs = wordpiece_pair
+    text = "hello wider unknown hello wider"
+    assert_encoding_equal(ours.encode(text), theirs.encode(text))
+    assert_encoding_equal(ours.encode(text), theirs.encode(text))
+
+
 def test_wordpiece_max_chars_parity():
     vocab = {"[UNK]": 0, "a": 1, "##a": 2}
     ours, theirs = paired(
@@ -308,6 +315,12 @@ def test_ffi_helpers_reject_narrowing_and_invalid_buffers():
         mojo_lib.addr(np.zeros((2, 2), dtype=np.int64), np.int64)
     with pytest.raises(RuntimeError):
         mojo_lib.checked_count(3, 2, "test kernel")
+
+
+def test_u32_buffer_is_zero_copy_and_ffi_compatible():
+    array = mojo_lib.u32("token")
+    assert not array.flags.owndata
+    assert mojo_lib.addr(array, np.uint32) == array.ctypes.data
 
 
 def test_count_boundary_validation():

@@ -86,7 +86,7 @@ def f64(values=(), *, size: int | None = None) -> np.ndarray:
 def u32(text: str) -> np.ndarray:
     array = np.frombuffer(text.encode("utf-32-le"), dtype=np.uint32)
     if array.size:
-        return np.array(array, dtype=np.uint32, order="C", copy=True)
+        return array
     return np.zeros(1, dtype=np.uint32)
 
 

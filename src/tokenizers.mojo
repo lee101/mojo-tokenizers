@@ -1,5 +1,6 @@
 """Compute kernels for subword tokenization and training."""
 
+from max.algorithm import parallelize
 from std.sys.info import simd_width_of
 
 comptime IPtr = UnsafePointer[Int, AnyOrigin[mut=True]]
@@ -29,6 +30,18 @@ def fill_f64(pointer: FPtr, start: Int, count: Int, value: Float64):
     comptime W = simd_width_of[DType.float64]()
     var i = 0
     var vector = SIMD[DType.float64, W](value)
+    while i + W <= count:
+        pointer.store(start + i, vector)
+        i += W
+    while i < count:
+        pointer[start + i] = value
+        i += 1
+
+
+def fill_i64(pointer: IPtr, start: Int, count: Int, value: Int):
+    comptime W = simd_width_of[DType.float64]()
+    var i = 0
+    var vector = SIMD[DType.int, W](value)
     while i + W <= count:
         pointer.store(start + i, vector)
         i += W
@@ -70,8 +83,7 @@ def mt_count_tokens_pairs(
     var pair_left = IPtr(unsafe_from_address=pair_left_addr)
     var pair_right = IPtr(unsafe_from_address=pair_right_addr)
     var pair_counts = IPtr(unsafe_from_address=pair_counts_addr)
-    for i in range(n_tokens):
-        token_counts[i] = 0
+    fill_i64(token_counts, 0, n_tokens, 0)
     comptime CLEAR_CHUNK = 16_384
 
     @__copy_capture(pair_left, pair_right, pair_counts, cap)
@@ -79,13 +91,16 @@ def mt_count_tokens_pairs(
     def clear_chunk(chunk: Int):
         var start = chunk * CLEAR_CHUNK
         var end = min(cap, start + CLEAR_CHUNK)
-        for i in range(start, end):
-            pair_left[i] = -1
-            pair_right[i] = -1
-            pair_counts[i] = 0
+        fill_i64(pair_left, start, end - start, -1)
+        fill_i64(pair_right, start, end - start, -1)
+        fill_i64(pair_counts, start, end - start, 0)
 
-    for chunk in range((cap + CLEAR_CHUNK - 1) // CLEAR_CHUNK):
-        clear_chunk(chunk)
+    var clear_chunks = (cap + CLEAR_CHUNK - 1) // CLEAR_CHUNK
+    if cap >= 65_536:
+        parallelize[clear_chunk](clear_chunks, min(clear_chunks, 8))
+    else:
+        for chunk in range(clear_chunks):
+            clear_chunk(chunk)
     var unique = 0
     for w in range(n_words):
         var start = Int(offsets[w])
