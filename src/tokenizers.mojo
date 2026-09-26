@@ -1,6 +1,5 @@
 """Compute kernels for subword tokenization and training."""
 
-from max.algorithm import parallelize
 from std.sys.info import simd_width_of
 
 comptime IPtr = UnsafePointer[Int, AnyOrigin[mut=True]]
@@ -85,22 +84,13 @@ def mt_count_tokens_pairs(
     var pair_counts = IPtr(unsafe_from_address=pair_counts_addr)
     fill_i64(token_counts, 0, n_tokens, 0)
     comptime CLEAR_CHUNK = 16_384
-
-    @__copy_capture(pair_left, pair_right, pair_counts, cap)
-    @__parameter
-    def clear_chunk(chunk: Int):
+    var clear_chunks = (cap + CLEAR_CHUNK - 1) // CLEAR_CHUNK
+    for chunk in range(clear_chunks):
         var start = chunk * CLEAR_CHUNK
         var end = min(cap, start + CLEAR_CHUNK)
         fill_i64(pair_left, start, end - start, -1)
         fill_i64(pair_right, start, end - start, -1)
         fill_i64(pair_counts, start, end - start, 0)
-
-    var clear_chunks = (cap + CLEAR_CHUNK - 1) // CLEAR_CHUNK
-    if cap >= 65_536:
-        parallelize[clear_chunk](clear_chunks, min(clear_chunks, 8))
-    else:
-        for chunk in range(clear_chunks):
-            clear_chunk(chunk)
     var unique = 0
     for w in range(n_words):
         var start = Int(offsets[w])
